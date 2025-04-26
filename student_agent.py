@@ -136,13 +136,12 @@ class ObservationProcessor:
         return obs
     
 
-agent = DQNAgent((4,84,84), 12)
 # Do not modify the input of the 'act' function and the '__init__' function. 
 class Agent(object):
     """Agent that acts randomly."""
     def __init__(self):
         self.action_space = gym.spaces.Discrete(12)
-        self.agent = DQNAgent(4, 12)  # 你原本就有
+        self.agent = DQNAgent((4,84,84), 12)  # 你原本就有
         checkpoint = torch.load("models_normal_99999975/model.pth")
         self.agent.qnet_local.load_state_dict(checkpoint['qnet_local'])
         self.obs_processor = ObservationProcessor()
