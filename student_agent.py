@@ -93,15 +93,15 @@ class FrameBufferIdentity:
     def __init__(self, num_steps=4, shape=(1, 84, 84)):
         self.num_steps = num_steps
         self.shape = shape
-        self.buffer = np.zeros((num_steps,) + shape, dtype=np.float32)
+        self.buffer = np.zeros((num_steps, 84, 84), dtype=np.float32)
 
     def reset(self):
-        self.buffer = np.zeros((self.num_steps,) + self.shape, dtype=np.float32)
+        self.buffer = np.zeros((self.num_steps, 84, 84), dtype=np.float32)
 
     def __call__(self, observation):
+        observation = np.squeeze(observation, axis=0)
         self.buffer[:-1] = self.buffer[1:]
         self.buffer[-1] = observation
-        self.buffer.squeeze(1)
         return self.buffer
 
 class ObservationProcessor:
