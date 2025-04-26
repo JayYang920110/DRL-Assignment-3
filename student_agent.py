@@ -1,28 +1,10 @@
 import gym
 import torch
 from torch import nn
-from torchvision import transforms as T
-from torch.autograd import Variable
-from torch import FloatTensor, LongTensor
-import math
 import numpy as np
-import time
-import cv2
-import random, datetime, os, copy
-import matplotlib.pyplot as plt
+import random
 # Gym is an OpenAI toolkit for RL
 import gym
-from gym import make
-from gym.spaces import Box
-from gym.wrappers import FrameStack
-
-# NES Emulator for OpenAI Gym
-from nes_py.wrappers import JoypadSpace
-
-# Super Mario environment for OpenAI Gym
-import gym_super_mario_bros
-from gym_super_mario_bros.actions import SIMPLE_MOVEMENT, COMPLEX_MOVEMENT
-
 
 class QNet(nn.Module):
     def __init__(self, input_shape, n_actions):
@@ -90,16 +72,30 @@ class DQNAgent:
         else:
             return random.choice(np.arange(self.action_size))
         
+# class FrameDownsampleIdentity:
+#     def __init__(self, width=84, height=84):
+#         self._width = width
+#         self._height = height
+
+#     def __call__(self, observation):
+#         frame = cv2.cvtColor(observation, cv2.COLOR_RGB2GRAY)
+#         frame = cv2.resize(frame, (self._width, self._height), interpolation=cv2.INTER_AREA)
+#         return frame[:, :, None]
+from PIL import Image
+import numpy as np
+
 class FrameDownsampleIdentity:
     def __init__(self, width=84, height=84):
         self._width = width
         self._height = height
 
     def __call__(self, observation):
-        frame = cv2.cvtColor(observation, cv2.COLOR_RGB2GRAY)
-        frame = cv2.resize(frame, (self._width, self._height), interpolation=cv2.INTER_AREA)
-        return frame[:, :, None]
 
+        img = Image.fromarray(observation)
+        img = img.convert('L')
+        img = img.resize((self._width, self._height), Image.BILINEAR)
+        frame = np.array(img, dtype=np.uint8)
+        return frame[:, :, None]
 class ImageToPyTorchIdentity:
     def __call__(self, observation):
         return np.moveaxis(observation, 2, 0)  # (H,W,C) -> (C,H,W)
