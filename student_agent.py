@@ -136,5 +136,5 @@ class Agent(object):
 
     def act(self, observation):
         observation = self.obs_processor.process(observation)
-        action = self.agent.get_action(observation, 0.2)
+        action = self.agent.get_action(observation, 0.1)
         return action
