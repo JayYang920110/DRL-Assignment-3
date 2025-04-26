@@ -78,7 +78,7 @@ class FrameDownsampleIdentity:
         img = img.convert('L')
         img = img.resize((self._width, self._height), Image.BILINEAR)
         frame = np.array(img, dtype=np.uint8)
-        return frame[:, :, None]
+        return frame
 
 class ImageToPyTorchIdentity:
     def __call__(self, observation):
