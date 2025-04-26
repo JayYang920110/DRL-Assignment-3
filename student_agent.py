@@ -142,7 +142,7 @@ class Agent(object):
     def __init__(self):
         self.action_space = gym.spaces.Discrete(12)
         self.agent = DQNAgent((4,84,84), 12)  # 你原本就有
-        checkpoint = torch.load("models_normal_99999975/model.pth")
+        checkpoint = torch.load("models_temp/model.pth")
         self.agent.qnet_local.load_state_dict(checkpoint['qnet_local'])
         self.obs_processor = ObservationProcessor()
         
