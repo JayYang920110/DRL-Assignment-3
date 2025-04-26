@@ -14,7 +14,7 @@ class QNet(nn.Module):
 
         # Shared convolutional feature extractor
         self.features = nn.Sequential(
-            nn.Conv2d(input_shape, 32, kernel_size=8, stride=4),
+            nn.Conv2d(input_shape[0], 32, kernel_size=8, stride=4),
             nn.ReLU(),
             nn.Conv2d(32, 64, kernel_size=4, stride=2),
             nn.ReLU(),
@@ -136,7 +136,7 @@ class ObservationProcessor:
         return obs
     
 
-agent = DQNAgent(4, 12)
+agent = DQNAgent((4,84,84), 12)
 # Do not modify the input of the 'act' function and the '__init__' function. 
 class Agent(object):
     """Agent that acts randomly."""
