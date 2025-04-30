@@ -129,12 +129,12 @@ class Agent(object):
         
         self.agent = DQNAgent((4, 84, 84), 12, device=self.device)
         
-        checkpoint = torch.load("models_temp/model.pth", map_location=self.device)
+        checkpoint = torch.load("./model.pth", map_location=self.device)
         self.agent.qnet_local.load_state_dict(checkpoint['qnet_local'])
         
         self.obs_processor = ObservationProcessor()
 
     def act(self, observation):
         observation = self.obs_processor.process(observation)
-        action = self.agent.get_action(observation, 0.1)
+        action = self.agent.get_action(observation, 0.01)
         return action
