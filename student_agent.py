@@ -136,7 +136,7 @@ class Agent:
         norm = resized.astype(np.float32) / 255.0
         return norm  # (84, 84)
 
-    def get_action(self, observation):
+    def act(self, observation):
         processed = self.preprocess(observation)
         self.obs_queue.append(processed)
 
