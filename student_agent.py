@@ -81,42 +81,55 @@ class Agent:
         checkpoint = torch.load("./model.pth", map_location=self.device)
         self.agent.qnet_local.load_state_dict(checkpoint['qnet_local'])
 
-        self.obs_queue = deque(maxlen=4)  # 收集最近 4 幀
-        self.stack_buffer = np.zeros((4, 84, 84), dtype=np.float32)
+        self.raw_obs_buffer = []  # 暫存連續4幀原始obs
+        self.stack_buffer = np.zeros((4, 84, 84), dtype=np.float32)  # frame stack
+        self.last_action = 0
+        self.frame_count = 0  # 記錄幾幀進來了
 
     def reset(self):
-        self.obs_queue.clear()
+        self.raw_obs_buffer.clear()
         self.stack_buffer[:] = 0
+        self.last_action = 0
+        self.frame_count = 0
 
     def preprocess(self, obs):
         gray = cv2.cvtColor(obs, cv2.COLOR_RGB2GRAY)
         resized = cv2.resize(gray, (84, 84), interpolation=cv2.INTER_AREA)
-        return resized.astype(np.float32) / 255.0  # shape: (84, 84)
+        return resized.astype(np.float32) / 255.0
 
     def act(self, observation):
-        processed = self.preprocess(observation)
-        self.obs_queue.append(processed)
+        self.frame_count += 1
+        self.raw_obs_buffer.append(observation)
 
-        # 若已經累積 4 張幀（等同環境連續 4 次 step）
-        if len(self.obs_queue) == 4:
-            # 用最後兩張做 max-pool
-            max_frame = np.maximum(self.obs_queue[-1], self.obs_queue[-2])
-        else:
-            # 前幾步還在 warm-up，直接用現有的
-            max_frame = processed
+        # 還沒收集滿 4 幀就先回傳上次的動作（cold start）
+        if len(self.raw_obs_buffer) < 4:
+            return self.last_action
 
+        # 第4幀來了：模擬 MaxAndSkipEnv (skip=4) 的 max(obs[-2], obs[-1])
+        obs3 = self.preprocess(self.raw_obs_buffer[-2])
+        obs4 = self.preprocess(self.raw_obs_buffer[-1])
+        max_frame = np.maximum(obs3, obs4)
+
+        # 更新 frame stack
         self.stack_buffer[:-1] = self.stack_buffer[1:]
         self.stack_buffer[-1] = max_frame
 
+        # 清除前4幀中的第一幀，維持最多保留4幀
+        if len(self.raw_obs_buffer) > 4:
+            self.raw_obs_buffer.pop(0)
+
+        # Epsilon-greedy 動作選擇
         eps = 0.01
         if random.random() < eps:
-            return random.randint(0, self.agent.action_size - 1)
+            self.last_action = random.randint(0, self.agent.action_size - 1)
+        else:
+            state_tensor = torch.from_numpy(self.stack_buffer).unsqueeze(0).to(self.device)
+            self.agent.qnet_local.eval()
+            with torch.no_grad():
+                q_values = self.agent.qnet_local(state_tensor)
+            self.last_action = q_values.argmax(1).item()
 
-        state_tensor = torch.from_numpy(self.stack_buffer).unsqueeze(0).to(self.device)
-        self.agent.qnet_local.eval()
-        with torch.no_grad():
-            q_values = self.agent.qnet_local(state_tensor)
-        return q_values.argmax(1).item()
+        return self.last_action
 
 
 # import gym
