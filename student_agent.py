@@ -93,7 +93,7 @@ class Agent:
         resized = cv2.resize(gray, (84, 84), interpolation=cv2.INTER_AREA)
         return resized.astype(np.float32) / 255.0  # shape: (84, 84)
 
-    def get_action(self, observation):
+    def act(self, observation):
         processed = self.preprocess(observation)
         self.obs_queue.append(processed)
 
