@@ -72,47 +72,6 @@ import numpy as np
 import cv2
 from collections import deque
 
-class InferencePreprocessor:
-    def __init__(self, skip=4, num_stack=4, height=84, width=84):
-        self.skip = skip
-        self.num_stack = num_stack
-        self.height = height
-        self.width = width
-        self.frame_buffer = deque(maxlen=2)
-        self.stack_buffer = np.zeros((num_stack, height, width), dtype=np.float32)
-
-    def reset(self):
-        self.frame_buffer.clear()
-        self.stack_buffer = np.zeros((self.num_stack, self.height, self.width), dtype=np.float32)
-
-    def preprocess(self, observation):
-        # 1. Downsample (cv2灰階 + resize)
-        gray = cv2.cvtColor(observation, cv2.COLOR_RGB2GRAY)
-        resized = cv2.resize(gray, (self.width, self.height), interpolation=cv2.INTER_AREA)
-        return resized.astype(np.uint8)  # shape: (84, 84)
-
-    def step(self, env, action):
-        total_reward = 0.0
-        done = False
-        info = {}
-        for _ in range(self.skip):
-            obs, reward, done, info = env.step(action)
-            self.frame_buffer.append(obs)
-            total_reward += reward
-            if done:
-                break
-
-        # Max-pool last 2 frames
-        max_frame = np.max(np.stack(self.frame_buffer), axis=0)
-        processed = self.preprocess(max_frame)  # shape: (84, 84)
-
-        # FrameStack (move axis + normalize)
-        self.stack_buffer[:-1] = self.stack_buffer[1:]
-        self.stack_buffer[-1] = processed.astype(np.float32) / 255.0  # Normalize [0,1]
-        stacked = self.stack_buffer.copy()
-        return stacked, total_reward, done, info
-
-
 # Agent
 class Agent:
     def __init__(self):
@@ -122,7 +81,7 @@ class Agent:
         checkpoint = torch.load("./model.pth", map_location=self.device)
         self.agent.qnet_local.load_state_dict(checkpoint['qnet_local'])
 
-        self.obs_queue = deque(maxlen=2)  # 模擬 MaxAndSkipEnv
+        self.obs_queue = deque(maxlen=4)  # 收集最近 4 幀
         self.stack_buffer = np.zeros((4, 84, 84), dtype=np.float32)
 
     def reset(self):
@@ -130,35 +89,34 @@ class Agent:
         self.stack_buffer[:] = 0
 
     def preprocess(self, obs):
-        # Downsample + grayscale + normalize (cv2)
         gray = cv2.cvtColor(obs, cv2.COLOR_RGB2GRAY)
         resized = cv2.resize(gray, (84, 84), interpolation=cv2.INTER_AREA)
-        norm = resized.astype(np.float32) / 255.0
-        return norm  # (84, 84)
+        return resized.astype(np.float32) / 255.0  # shape: (84, 84)
 
-    def act(self, observation):
+    def get_action(self, observation):
         processed = self.preprocess(observation)
         self.obs_queue.append(processed)
 
-        if len(self.obs_queue) == 2:
-            max_frame = np.maximum(self.obs_queue[0], self.obs_queue[1])
+        # 若已經累積 4 張幀（等同環境連續 4 次 step）
+        if len(self.obs_queue) == 4:
+            # 用最後兩張做 max-pool
+            max_frame = np.maximum(self.obs_queue[-1], self.obs_queue[-2])
         else:
+            # 前幾步還在 warm-up，直接用現有的
             max_frame = processed
 
         self.stack_buffer[:-1] = self.stack_buffer[1:]
         self.stack_buffer[-1] = max_frame
 
-        # Epsilon-greedy
         eps = 0.01
         if random.random() < eps:
             return random.randint(0, self.agent.action_size - 1)
 
-        state_tensor = torch.from_numpy(self.stack_buffer).unsqueeze(0).to(self.device)  # (1, 4, 84, 84)
+        state_tensor = torch.from_numpy(self.stack_buffer).unsqueeze(0).to(self.device)
         self.agent.qnet_local.eval()
         with torch.no_grad():
             q_values = self.agent.qnet_local(state_tensor)
-        action = q_values.argmax(1).item()
-        return action
+        return q_values.argmax(1).item()
 
 
 # import gym
