@@ -114,9 +114,8 @@ class Agent:
         self.stack_buffer[:-1] = self.stack_buffer[1:]
         self.stack_buffer[-1] = max_frame
 
-        # 清除前4幀中的第一幀，維持最多保留4幀
-        if len(self.raw_obs_buffer) > 4:
-            self.raw_obs_buffer.clear()
+        
+        self.raw_obs_buffer.clear()
 
         # Epsilon-greedy 動作選擇
         eps = 0.01
