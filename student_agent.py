@@ -107,30 +107,55 @@ class Agent:
             self.stack_buffer[:-1] = self.stack_buffer[1:]
             self.stack_buffer[-1] = obs
             return self.last_action
- 
-        # 第4幀來了：模擬 MaxAndSkipEnv (skip=4) 的 max(obs[-2], obs[-1])
-        obs3 = self.preprocess(self.raw_obs_buffer[-2])
-        obs4 = self.preprocess(self.raw_obs_buffer[-1])
-        max_frame = np.maximum(obs3, obs4)
+        if self.frame_count % 4 == 0:
+            # 模仿 max(obs[-2], obs[-1]) 的效果
+            obs3 = self.preprocess(self.raw_obs_buffer[-2])
+            obs4 = self.preprocess(self.raw_obs_buffer[-1])
+            max_frame = np.maximum(obs3, obs4)
 
-        # 更新 frame stack
-        self.stack_buffer[:-1] = self.stack_buffer[1:]
-        self.stack_buffer[-1] = max_frame
+            # 更新 frame stack
+            self.stack_buffer[:-1] = self.stack_buffer[1:]
+            self.stack_buffer[-1] = max_frame
 
-        
-        self.raw_obs_buffer.clear()
+            # 清空 raw buffer，只保留最近一幀供下次比較
+            self.raw_obs_buffer = self.raw_obs_buffer[-1:]
 
-        # Epsilon-greedy 動作選擇
-        eps = 0.01
-        if random.random() < eps:
-            self.last_action = random.randint(0, self.agent.action_size - 1)
-        else:
-            state_tensor = torch.from_numpy(self.stack_buffer).unsqueeze(0).to(self.device)
-            self.agent.qnet_local.eval()
-            with torch.no_grad():
-                q_values = self.agent.qnet_local(state_tensor)
-            self.last_action = q_values.argmax(1).item()
+            # Epsilon-greedy 動作選擇（推論時 eps 很小）
+            eps = 0.01
+            if random.random() < eps:
+                self.last_action = random.randint(0, self.agent.action_size - 1)
+            else:
+                state_tensor = torch.from_numpy(self.stack_buffer).unsqueeze(0).to(self.device)
+                self.agent.qnet_local.eval()
+                with torch.no_grad():
+                    q_values = self.agent.qnet_local(state_tensor)
+                self.last_action = q_values.argmax(1).item()
 
         return self.last_action
+
+        # # 第4幀來了：模擬 MaxAndSkipEnv (skip=4) 的 max(obs[-2], obs[-1])
+        # obs3 = self.preprocess(self.raw_obs_buffer[-2])
+        # obs4 = self.preprocess(self.raw_obs_buffer[-1])
+        # max_frame = np.maximum(obs3, obs4)
+
+        # # 更新 frame stack
+        # self.stack_buffer[:-1] = self.stack_buffer[1:]
+        # self.stack_buffer[-1] = max_frame
+
+        
+        # self.raw_obs_buffer.clear()
+
+        # # Epsilon-greedy 動作選擇
+        # eps = 0.01
+        # if random.random() < eps:
+        #     self.last_action = random.randint(0, self.agent.action_size - 1)
+        # else:
+        #     state_tensor = torch.from_numpy(self.stack_buffer).unsqueeze(0).to(self.device)
+        #     self.agent.qnet_local.eval()
+        #     with torch.no_grad():
+        #         q_values = self.agent.qnet_local(state_tensor)
+        #     self.last_action = q_values.argmax(1).item()
+
+        # return self.last_action
 
 
