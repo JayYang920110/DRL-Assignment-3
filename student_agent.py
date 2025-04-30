@@ -104,7 +104,7 @@ class Agent:
         # 還沒收集滿 4 幀就先回傳上次的動作（cold start）
         if len(self.raw_obs_buffer) < 4:
             return self.last_action
-
+ 
         # 第4幀來了：模擬 MaxAndSkipEnv (skip=4) 的 max(obs[-2], obs[-1])
         obs3 = self.preprocess(self.raw_obs_buffer[-2])
         obs4 = self.preprocess(self.raw_obs_buffer[-1])
@@ -116,7 +116,7 @@ class Agent:
 
         # 清除前4幀中的第一幀，維持最多保留4幀
         if len(self.raw_obs_buffer) > 4:
-            self.raw_obs_buffer.pop(0)
+            self.raw_obs_buffer.clear()
 
         # Epsilon-greedy 動作選擇
         eps = 0.01
