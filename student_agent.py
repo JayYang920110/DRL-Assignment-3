@@ -91,11 +91,13 @@ class Agent:
         self.frame_count += 1
 
         if self.frame_count == 1:
+            print("reset")
             self.raw_obs_buffer.append(observation)
-            
+
             obs = self.preprocess(self.raw_obs_buffer[-1])
-            self.stack_buffer[:-1] = self.stack_buffer[1:]
-            self.stack_buffer[-1] = obs
+            self.stack_buffer = np.repeat(obs, 4, axis=0) 
+            # self.stack_buffer[:-1] = self.stack_buffer[1:]
+            # self.stack_buffer[-1] = obs
             self.last_action = self.select_action(self.stack_buffer)
             return self.last_action  
         # 儲存最新 obs，模仿 MaxAndSkipEnv (保留兩幀)
