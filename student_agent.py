@@ -102,32 +102,31 @@ class Agent:
         self.frame_count += 1
 
         # 儲存最新 obs，模仿 MaxAndSkipEnv (保留兩幀)
-        self.raw_obs_buffer.append(observation)
-        if len(self.raw_obs_buffer) > 2:
-            self.raw_obs_buffer.pop(0)
+        if self.frame_count % 4 == 1:
+            self.raw_obs_buffer.append(observation)
+            if len(self.raw_obs_buffer) > 2:
+                self.raw_obs_buffer.pop(0)
 
-        # 前 4 幀：每幀都算 max_frame，填滿 stack_buffer（模仿 FrameBuffer 的初始化）
-        if self.frame_count <= 4 and len(self.raw_obs_buffer) == 2:
-            obs3 = self.preprocess(self.raw_obs_buffer[0])
-            obs4 = self.preprocess(self.raw_obs_buffer[1])
-            max_frame = np.maximum(obs3, obs4)  # shape: (1, 84, 84)
-            self.stack_buffer[self.frame_count - 1] = max_frame[0]  # 放入 stack_buffer 第 i 張
-            return self.last_action  # 前 4 幀不決策，只塞 buffer
-
-        # 之後每 4 幀做決策
-        if self.frame_count > 4 and self.frame_count % 4 == 0 and len(self.raw_obs_buffer) == 2:
-            obs3 = self.preprocess(self.raw_obs_buffer[0])
-            obs4 = self.preprocess(self.raw_obs_buffer[1])
-            max_frame = np.maximum(obs3, obs4)
-
-            # 更新 frame stack（滑動）
+            obs = self.preprocess(self.raw_obs_buffer[-1])
             self.stack_buffer[:-1] = self.stack_buffer[1:]
-            self.stack_buffer[-1] = max_frame[0]
-
-            # 推論動作
-            self.last_action = self.select_action(self.stack_buffer)
-
-        return self.last_action
+            self.stack_buffer[-1] = obs
+            self.last_action = self.select_action(obs)
+            return self.last_action
+        else:
+            if self.frame_count % 4 == 2 or self.frame_count % 4 == 3:
+                self.raw_obs_buffer.append(observation)
+                if len(self.raw_obs_buffer) > 2:
+                    self.raw_obs_buffer.pop(0)
+                return self.last_action
+            elif self.frame_count % 4 == 0:
+                self.raw_obs_buffer.append(observation)
+                if len(self.raw_obs_buffer) > 2:
+                    self.raw_obs_buffer.pop(0)
+                max_frame = np.max(np.stack(self.raw_obs_buffer), axis=0)
+                obs = self.preprocess(max_frame)
+                self.stack_buffer[:-1] = self.stack_buffer[1:]
+                self.stack_buffer[-1] = obs
+                return self.last_action
 
     def select_action(self, stack):
         eps = 0.01  # inference 固定低 epsilon
