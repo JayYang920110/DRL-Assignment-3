@@ -64,6 +64,11 @@ import cv2
 from collections import deque
 
 # Agent
+import numpy as np
+import torch
+import random
+import cv2
+
 class Agent:
     def __init__(self):
         self.device = torch.device("cpu")
@@ -72,64 +77,61 @@ class Agent:
         checkpoint = torch.load("./model.pth", map_location=self.device)
         self.agent.qnet_local.load_state_dict(checkpoint['qnet_local'])
 
-        self.raw_obs_buffer = []  # 暫存連續4幀原始obs
+        self.raw_obs_buffer = []  # 模仿 MaxAndSkipEnv 的兩幀 buffer
         self.stack_buffer = np.zeros((4, 84, 84), dtype=np.float32)  # frame stack
         self.last_action = 0
-        self.frame_count = 0  # 記錄幾幀進來了
+        self.frame_count = 0  # 幀計數
 
-    def reset(self):
+    def reset(self, initial_obs=None):
         self.raw_obs_buffer.clear()
         self.stack_buffer[:] = 0
         self.last_action = 0
         self.frame_count = 0
 
+        # 若有初始 obs，則用它填滿 frame stack（4 張一樣的）
+        if initial_obs is not None:
+            preprocessed = self.preprocess(initial_obs)  # shape: (1, 84, 84)
+            self.stack_buffer = np.repeat(preprocessed, 4, axis=0)
+
     def preprocess(self, obs):
         gray = cv2.cvtColor(obs, cv2.COLOR_RGB2GRAY)
         resized = cv2.resize(gray, (84, 84), interpolation=cv2.INTER_AREA)
-        return resized.astype(np.float32) / 255.0
-
+        return resized.astype(np.float32)[None, :, :] / 255.0  # shape: (1, 84, 84)
 
     def act(self, observation):
         self.frame_count += 1
 
-        # 保留最後兩幀 raw obs（模仿 MaxAndSkipEnv 的 obs_buffer）
+        # 儲存最新 obs（最多保留 2 幀）
         self.raw_obs_buffer.append(observation)
         if len(self.raw_obs_buffer) > 2:
             self.raw_obs_buffer.pop(0)
 
-        # 在前幾幀先填滿 frame stack，以免送入全 0 的狀態
-        if self.frame_count < 4:
-            preprocessed = self.preprocess(observation)
-            self.stack_buffer[:-1] = self.stack_buffer[1:]
-            self.stack_buffer[-1] = preprocessed
-            return self.last_action  # 尚未進行決策，重複上一動作
-
-        # 每 4 幀更新一次 max_frame 並做決策（模仿 MaxAndSkipEnv(skip=4)）
+        # 每 4 幀進行一次 max_frame + stack 更新與動作決策
         if self.frame_count % 4 == 0 and len(self.raw_obs_buffer) == 2:
             obs3 = self.preprocess(self.raw_obs_buffer[0])
             obs4 = self.preprocess(self.raw_obs_buffer[1])
-            max_frame = np.maximum(obs3, obs4)
+            max_frame = np.maximum(obs3, obs4)  # shape: (1, 84, 84)
 
-            # 更新 frame stack
+            # 更新 frame stack（滑動）
             self.stack_buffer[:-1] = self.stack_buffer[1:]
-            self.stack_buffer[-1] = max_frame
+            self.stack_buffer[-1] = max_frame[0]  # 去掉 channel 維度，shape: (84, 84)
 
-            # 選擇動作
+            # 模型推論
             self.last_action = self.select_action(self.stack_buffer)
 
         return self.last_action
 
-
     def select_action(self, stack):
-        eps = 0.01
+        eps = 0.01  # inference 固定低 epsilon
         if random.random() < eps:
             return random.randint(0, self.agent.action_size - 1)
         else:
-            state_tensor = torch.from_numpy(stack).unsqueeze(0).to(self.device)
+            state_tensor = torch.from_numpy(stack).unsqueeze(0).to(self.device)  # shape: (1, 4, 84, 84)
             self.agent.qnet_local.eval()
             with torch.no_grad():
                 q_values = self.agent.qnet_local(state_tensor)
             return q_values.argmax(1).item()
+
 
         # # 第4幀來了：模擬 MaxAndSkipEnv (skip=4) 的 max(obs[-2], obs[-1])
         # obs3 = self.preprocess(self.raw_obs_buffer[-2])
