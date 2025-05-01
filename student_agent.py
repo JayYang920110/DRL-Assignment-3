@@ -101,22 +101,30 @@ class Agent:
     def act(self, observation):
         self.frame_count += 1
 
-        # 儲存最新 obs（最多保留 2 幀）
+        # 儲存最新 obs，模仿 MaxAndSkipEnv (保留兩幀)
         self.raw_obs_buffer.append(observation)
         if len(self.raw_obs_buffer) > 2:
             self.raw_obs_buffer.pop(0)
 
-        # 每 4 幀進行一次 max_frame + stack 更新與動作決策
-        if self.frame_count % 4 == 0 and len(self.raw_obs_buffer) == 2:
+        # 前 4 幀：每幀都算 max_frame，填滿 stack_buffer（模仿 FrameBuffer 的初始化）
+        if self.frame_count <= 4 and len(self.raw_obs_buffer) == 2:
             obs3 = self.preprocess(self.raw_obs_buffer[0])
             obs4 = self.preprocess(self.raw_obs_buffer[1])
             max_frame = np.maximum(obs3, obs4)  # shape: (1, 84, 84)
+            self.stack_buffer[self.frame_count - 1] = max_frame[0]  # 放入 stack_buffer 第 i 張
+            return self.last_action  # 前 4 幀不決策，只塞 buffer
+
+        # 之後每 4 幀做決策
+        if self.frame_count > 4 and self.frame_count % 4 == 0 and len(self.raw_obs_buffer) == 2:
+            obs3 = self.preprocess(self.raw_obs_buffer[0])
+            obs4 = self.preprocess(self.raw_obs_buffer[1])
+            max_frame = np.maximum(obs3, obs4)
 
             # 更新 frame stack（滑動）
             self.stack_buffer[:-1] = self.stack_buffer[1:]
-            self.stack_buffer[-1] = max_frame[0]  # 去掉 channel 維度，shape: (84, 84)
+            self.stack_buffer[-1] = max_frame[0]
 
-            # 模型推論
+            # 推論動作
             self.last_action = self.select_action(self.stack_buffer)
 
         return self.last_action
