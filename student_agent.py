@@ -88,33 +88,37 @@ class Agent:
         resized = cv2.resize(gray, (84, 84), interpolation=cv2.INTER_AREA)
         return resized.astype(np.float32) / 255.0
 
+
     def act(self, observation):
         self.frame_count += 1
+
+        # 保留最後兩幀 raw obs（模仿 MaxAndSkipEnv 的 obs_buffer）
         self.raw_obs_buffer.append(observation)
+        if len(self.raw_obs_buffer) > 2:
+            self.raw_obs_buffer.pop(0)
 
-        obs = self.preprocess(observation)
-
-        # 若還未滿 4 幀，則照順序累積進 frame stack
-        if len(self.raw_obs_buffer) < 4:
+        # 在前幾幀先填滿 frame stack，以免送入全 0 的狀態
+        if self.frame_count < 4:
+            preprocessed = self.preprocess(observation)
             self.stack_buffer[:-1] = self.stack_buffer[1:]
-            self.stack_buffer[-1] = obs
-            return self.last_action  # 使用上一動作避免亂選
+            self.stack_buffer[-1] = preprocessed
+            return self.last_action  # 尚未進行決策，重複上一動作
 
-        # 每 4 幀選一次動作（模仿 MaxAndSkipEnv 的效果）
-        if self.frame_count % 4 == 0:
-            obs3 = self.preprocess(self.raw_obs_buffer[-2])
-            obs4 = self.preprocess(self.raw_obs_buffer[-1])
+        # 每 4 幀更新一次 max_frame 並做決策（模仿 MaxAndSkipEnv(skip=4)）
+        if self.frame_count % 4 == 0 and len(self.raw_obs_buffer) == 2:
+            obs3 = self.preprocess(self.raw_obs_buffer[0])
+            obs4 = self.preprocess(self.raw_obs_buffer[1])
             max_frame = np.maximum(obs3, obs4)
 
+            # 更新 frame stack
             self.stack_buffer[:-1] = self.stack_buffer[1:]
             self.stack_buffer[-1] = max_frame
 
-            # 清除只保留最新一幀供下次 max 比較
-            self.raw_obs_buffer.clear()
-
+            # 選擇動作
             self.last_action = self.select_action(self.stack_buffer)
 
         return self.last_action
+
 
     def select_action(self, stack):
         eps = 0.01
