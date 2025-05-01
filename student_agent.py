@@ -95,13 +95,13 @@ class Agent:
         obs = self.preprocess(observation)
 
         # 若還未滿 4 幀，則照順序累積進 frame stack
-        if len(self.raw_obs_buffer) <= 4:
+        if len(self.raw_obs_buffer) < 4:
             self.stack_buffer[:-1] = self.stack_buffer[1:]
             self.stack_buffer[-1] = obs
             return self.last_action  # 使用上一動作避免亂選
 
         # 每 4 幀選一次動作（模仿 MaxAndSkipEnv 的效果）
-        if self.frame_count % 4 == 1:
+        if self.frame_count % 4 == 0:
             obs3 = self.preprocess(self.raw_obs_buffer[-2])
             obs4 = self.preprocess(self.raw_obs_buffer[-1])
             max_frame = np.maximum(obs3, obs4)
@@ -110,7 +110,7 @@ class Agent:
             self.stack_buffer[-1] = max_frame
 
             # 清除只保留最新一幀供下次 max 比較
-            self.raw_obs_buffer = self.raw_obs_buffer[-1:]
+            self.raw_obs_buffer.clear()
 
             self.last_action = self.select_action(self.stack_buffer)
 
