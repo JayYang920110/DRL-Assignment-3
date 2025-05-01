@@ -110,7 +110,7 @@ class Agent:
             obs = self.preprocess(self.raw_obs_buffer[-1])
             self.stack_buffer[:-1] = self.stack_buffer[1:]
             self.stack_buffer[-1] = obs
-            self.last_action = self.select_action(obs)
+            self.last_action = self.select_action(self.stack_buffer)
             return self.last_action
         else:
             if self.frame_count % 4 == 2 or self.frame_count % 4 == 3:
