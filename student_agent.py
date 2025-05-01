@@ -82,17 +82,6 @@ class Agent:
         self.last_action = 0
         self.frame_count = 0  # 幀計數
 
-    def reset(self, initial_obs=None):
-        self.raw_obs_buffer.clear()
-        self.stack_buffer[:] = 0
-        self.last_action = 0
-        self.frame_count = 0
-
-        # 若有初始 obs，則用它填滿 frame stack（4 張一樣的）
-        if initial_obs is not None:
-            preprocessed = self.preprocess(initial_obs)  # shape: (1, 84, 84)
-            self.stack_buffer = np.repeat(preprocessed, 4, axis=0)
-
     def preprocess(self, obs):
         gray = cv2.cvtColor(obs, cv2.COLOR_RGB2GRAY)
         resized = cv2.resize(gray, (84, 84), interpolation=cv2.INTER_AREA)
@@ -101,15 +90,23 @@ class Agent:
     def act(self, observation):
         self.frame_count += 1
 
+        if self.frame_count == 1:
+            self.raw_obs_buffer.append(observation)
+            
+            obs = self.preprocess(self.raw_obs_buffer[-1])
+            self.stack_buffer[:-1] = self.stack_buffer[1:]
+            self.stack_buffer[-1] = obs
+            self.last_action = self.select_action(self.stack_buffer)
+            return self.last_action  
         # 儲存最新 obs，模仿 MaxAndSkipEnv (保留兩幀)
         if self.frame_count % 4 == 1:
             self.raw_obs_buffer.append(observation)
             if len(self.raw_obs_buffer) > 2:
                 self.raw_obs_buffer.pop(0)
 
-            obs = self.preprocess(self.raw_obs_buffer[-1])
-            self.stack_buffer[:-1] = self.stack_buffer[1:]
-            self.stack_buffer[-1] = obs
+            # obs = self.preprocess(self.raw_obs_buffer[-1])
+            # self.stack_buffer[:-1] = self.stack_buffer[1:]
+            # self.stack_buffer[-1] = obs
             self.last_action = self.select_action(self.stack_buffer)
             return self.last_action
         else:
