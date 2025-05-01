@@ -68,7 +68,7 @@ import numpy as np
 import torch
 import random
 import cv2
-
+from collections import deque
 class Agent:
     def __init__(self):
         self.device = torch.device("cpu")
@@ -77,7 +77,7 @@ class Agent:
         checkpoint = torch.load("./model.pth", map_location=self.device)
         self.agent.qnet_local.load_state_dict(checkpoint['qnet_local'])
 
-        self.raw_obs_buffer = []  # 模仿 MaxAndSkipEnv 的兩幀 buffer
+        self.raw_obs_buffer = deque(maxlen=2)  # 模仿 MaxAndSkipEnv 的兩幀 buffer
         self.stack_buffer = np.zeros((4, 84, 84), dtype=np.float32)  # frame stack
         self.last_action = 0
         self.frame_count = 0  # 幀計數
@@ -91,20 +91,17 @@ class Agent:
         self.frame_count += 1
 
         if self.frame_count == 1:
-            print("reset")
+
             self.raw_obs_buffer.append(observation)
 
             obs = self.preprocess(self.raw_obs_buffer[-1])
-            self.stack_buffer = np.repeat(obs, 4, axis=0) 
-            # self.stack_buffer[:-1] = self.stack_buffer[1:]
-            # self.stack_buffer[-1] = obs
+            self.stack_buffer[:-1] = self.stack_buffer[1:]
+            self.stack_buffer[-1] = obs
             self.last_action = self.select_action(self.stack_buffer)
             return self.last_action  
         # 儲存最新 obs，模仿 MaxAndSkipEnv (保留兩幀)
         if self.frame_count % 4 == 1:
             self.raw_obs_buffer.append(observation)
-            if len(self.raw_obs_buffer) > 2:
-                self.raw_obs_buffer.pop(0)
 
             # obs = self.preprocess(self.raw_obs_buffer[-1])
             # self.stack_buffer[:-1] = self.stack_buffer[1:]
@@ -114,13 +111,9 @@ class Agent:
         else:
             if self.frame_count % 4 == 2 or self.frame_count % 4 == 3:
                 self.raw_obs_buffer.append(observation)
-                if len(self.raw_obs_buffer) > 2:
-                    self.raw_obs_buffer.pop(0)
                 return self.last_action
             elif self.frame_count % 4 == 0:
                 self.raw_obs_buffer.append(observation)
-                if len(self.raw_obs_buffer) > 2:
-                    self.raw_obs_buffer.pop(0)
                 max_frame = np.max(np.stack(self.raw_obs_buffer), axis=0)
                 obs = self.preprocess(max_frame)
                 self.stack_buffer[:-1] = self.stack_buffer[1:]
