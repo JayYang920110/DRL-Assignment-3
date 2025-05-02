@@ -77,7 +77,7 @@ class Agent:
 
         self.agent = DQNAgent((4, 84, 84), 12, device=self.device)
 
-        checkpoint = torch.load(model_path, map_location=self.device)
+        checkpoint = torch.load('./model.pth', map_location=self.device)
         self.agent.qnet_local.load_state_dict(checkpoint['qnet_local'])
 
         self.raw_obs_buffer = deque(maxlen=2)  # 模仿 MaxAndSkipEnv 的兩幀 buffer
