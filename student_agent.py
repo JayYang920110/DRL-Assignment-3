@@ -90,7 +90,7 @@ class Agent:
             obs = self.preprocess(self.raw_obs_buffer[-1])
             self.stack_buffer[:-1] = self.stack_buffer[1:]
             self.stack_buffer[-1] = obs
-            norm_stack = self.stack_buffer / 255.0
+            norm_stack = self.stack_buffer.astype(np.float32) / 255.0
             self.last_action = self.select_action(norm_stack)
             return self.last_action  
         # 儲存最新 obs，模仿 MaxAndSkipEnv (保留兩幀)
@@ -100,7 +100,8 @@ class Agent:
             # obs = self.preprocess(self.raw_obs_buffer[-1])
             # self.stack_buffer[:-1] = self.stack_buffer[1:]
             # self.stack_buffer[-1] = obs
-            self.last_action = self.select_action(self.stack_buffer)
+            norm_stack = self.stack_buffer.astype(np.float32) / 255.0
+            self.last_action = self.select_action(norm_stack)
             return self.last_action
         else:
             if self.frame_count % 4 == 2 or self.frame_count % 4 == 3:
