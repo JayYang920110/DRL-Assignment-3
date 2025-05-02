@@ -74,6 +74,7 @@ class Agent:
     def preprocess(self, obs):
         gray = cv2.cvtColor(obs, cv2.COLOR_RGB2GRAY)
         resized = cv2.resize(gray, (84, 84), interpolation=cv2.INTER_AREA)
+        resized = resized[:,:,None]
         state = np.moveaxis(resized, 2, 0)
         return state # shape: (1, 84, 84)
 
