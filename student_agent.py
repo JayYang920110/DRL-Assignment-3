@@ -78,12 +78,12 @@ class Agent:
         state = np.moveaxis(resized, 2, 0)
         return state # shape: (1, 84, 84)
     def act(self, observation):
-
-        self.raw_obs_buffer.append(observation)
-
         if self.frame_count == 0:
             self.raw_obs_buffer.clear()
             self.stack_buffer[:] = 0
+        self.raw_obs_buffer.append(observation)
+
+
 
         if self.frame_count % 4 == 0:
             self.frame_count += 1
