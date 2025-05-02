@@ -78,35 +78,36 @@ class Agent:
         state = np.moveaxis(resized, 2, 0)
         return state # shape: (1, 84, 84)
     def act(self, observation):
-        self.frame_count += 1
-
-        if self.frame_count == 1:
-            self.raw_obs_buffer.clear()
-            self.stack_buffer[:] = 0
-
-            self.raw_obs_buffer.append(observation)
-            obs = self.preprocess(observation)
-            self.stack_buffer[-1] = obs  # 填最後一格
-            norm_stack = self.stack_buffer.astype(np.float32) / 255.0
-            self.last_action = self.select_action(norm_stack)
-            return self.last_action
 
         self.raw_obs_buffer.append(observation)
 
-        if self.frame_count % 4 == 0:
-            max_frame = np.max(np.stack(self.raw_obs_buffer), axis=0)
+        if self.frame_count == 0:
             self.raw_obs_buffer.clear()
+            self.stack_buffer[:] = 0
 
+        if self.frame_count % 4 == 0:
+            self.frame_count += 1
+            max_frame = np.max(np.stack(self.raw_obs_buffer), axis=0)
             obs = self.preprocess(max_frame)
             self.stack_buffer[:-1] = self.stack_buffer[1:]
             self.stack_buffer[-1] = obs
-
             norm_stack = self.stack_buffer.astype(np.float32) / 255.0
             self.last_action = self.select_action(norm_stack)
             return self.last_action
-
-        return self.last_action  # 不更新 stack、不選動作
-
+        
+        else:
+            self.frame_count += 1
+            return self.last_action
+    def select_action(self, stack):
+        eps = 0.01  # inference 固定低 epsilon
+        if random.random() < eps:
+            return random.randint(0, self.agent.action_size - 1)
+        else:
+            state_tensor = torch.from_numpy(stack).unsqueeze(0).to(self.device)  # shape: (1, 4, 84, 84)
+            self.agent.qnet_local.eval()
+            with torch.no_grad():
+                q_values = self.agent.qnet_local(state_tensor)
+            return q_values.argmax(1).item()
     # def act(self, observation):
     #     self.frame_count += 1
 
@@ -145,16 +146,7 @@ class Agent:
     #             self.stack_buffer = self.stack_buffer.astype(np.float32) / 255.0
     #             return self.last_action
 
-    def select_action(self, stack):
-        eps = 0.01  # inference 固定低 epsilon
-        if random.random() < eps:
-            return random.randint(0, self.agent.action_size - 1)
-        else:
-            state_tensor = torch.from_numpy(stack).unsqueeze(0).to(self.device)  # shape: (1, 4, 84, 84)
-            self.agent.qnet_local.eval()
-            with torch.no_grad():
-                q_values = self.agent.qnet_local(state_tensor)
-            return q_values.argmax(1).item()
+
 
 
 
