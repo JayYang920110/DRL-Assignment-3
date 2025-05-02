@@ -64,71 +64,56 @@ import cv2
 from collections import deque
 
 # Agent
+import gym
+import numpy as np
+import torch
+from collections import deque
+import cv2
+
 class Agent:
-    def __init__(self):
-        self.device = torch.device("cpu")
+    def __init__(self, model_path):
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.action_space = gym.spaces.Discrete(12)
+
         self.agent = DQNAgent((4, 84, 84), 12, device=self.device)
 
-        checkpoint = torch.load("./model.pth", map_location=self.device)
+        checkpoint = torch.load(model_path, map_location=self.device)
         self.agent.qnet_local.load_state_dict(checkpoint['qnet_local'])
 
-        self.raw_obs_buffer = []  # 暫存連續4幀原始obs
+        self.raw_obs_buffer = deque(maxlen=2)  # 模仿 MaxAndSkipEnv 的兩幀 buffer
         self.stack_buffer = np.zeros((4, 84, 84), dtype=np.float32)  # frame stack
-        self.last_action = 0
-        self.frame_count = 0  # 記錄幾幀進來了
-
-    def reset(self):
-        self.raw_obs_buffer.clear()
-        self.stack_buffer[:] = 0
-        self.last_action = 0
         self.frame_count = 0
+        self.eps = 0.01
 
     def preprocess(self, obs):
         gray = cv2.cvtColor(obs, cv2.COLOR_RGB2GRAY)
         resized = cv2.resize(gray, (84, 84), interpolation=cv2.INTER_AREA)
-        return resized.astype(np.float32) / 255.0
+        return np.expand_dims(resized, axis=0).astype(np.float32)  # shape: (1, 84, 84)
 
+    def reset(self, initial_obs):
+        self.raw_obs_buffer.clear()
+        self.frame_count = 0
 
-    def act(self, observation):
+        preprocessed = self.preprocess(initial_obs)
+        self.stack_buffer[:] = np.repeat(preprocessed, 4, axis=0)
+
+    def act(self, obs):
         self.frame_count += 1
+        preprocessed = self.preprocess(obs)
+        self.raw_obs_buffer.append(preprocessed)
 
+        if self.frame_count % 4 in (2, 3):
+            return self.agent.last_action  # 重複動作
 
-        # 保留最後兩幀 raw obs（模仿 MaxAndSkipEnv 的 obs_buffer）
-        self.raw_obs_buffer.append(observation)
-        if len(self.raw_obs_buffer) > 2:
-            self.raw_obs_buffer.pop(0)
-
-        # 在前幾幀先填滿 frame stack，以免送入全 0 的狀態
-        if self.frame_count < 4:
-            preprocessed = self.preprocess(observation)
-            self.stack_buffer[:-1] = self.stack_buffer[1:]
-            self.stack_buffer[-1] = preprocessed
-            return self.last_action  # 尚未進行決策，重複上一動作
-
-        # 每 4 幀更新一次 max_frame 並做決策（模仿 MaxAndSkipEnv(skip=4)）
-        if self.frame_count % 4 == 0 and len(self.raw_obs_buffer) == 2:
-            obs3 = self.preprocess(self.raw_obs_buffer[0])
-            obs4 = self.preprocess(self.raw_obs_buffer[1])
-            max_frame = np.maximum(obs3, obs4)
-
-            # 更新 frame stack
-            self.stack_buffer[:-1] = self.stack_buffer[1:]
-            self.stack_buffer[-1] = max_frame
- 
-            # 選擇動作
-            self.last_action = self.select_action(self.stack_buffer)
-
-
-        return self.last_action
-
-
-    def select_action(self, stack):
-        eps = 0.01
-        if random.random() < eps:
-            return random.randint(0, self.agent.action_size - 1)
+        if len(self.raw_obs_buffer) == 2:
+            max_frame = np.maximum(self.raw_obs_buffer[0], self.raw_obs_buffer[1])
         else:
-            state_tensor = torch.from_numpy(stack).unsqueeze(0).to(self.device)
-            self.agent.qnet_local.eval()
-            with torch.no_grad():
-                q_values = self.agent.qnet_local(state_tensor)
-            return q_values.argmax(1).item()
+            max_frame = self.raw_obs_buffer[0]
+
+        self.stack_buffer[:-1] = self.stack_buffer[1:]
+        self.stack_buffer[-1] = max_frame[0]  # squeeze shape (1, 84, 84) → (84, 84)
+
+        input_state = self.stack_buffer / 255.0  # normalize to [0, 1]
+        action = self.agent.get_action(input_state, self.eps)
+        self.agent.last_action = action
+        return action
