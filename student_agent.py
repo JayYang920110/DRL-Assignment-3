@@ -56,7 +56,16 @@ class DQNAgent:
 
         self.qnet_local = QNet(state_size, action_size).to(self.device)
         self.qnet_target = QNet(state_size, action_size).to(self.device)
-
+    def get_action(self, stack):
+        eps = 0.01  # inference 固定低 epsilon
+        if random.random() < eps:
+            return random.randint(0, self.agent.action_size - 1)
+        else:
+            state_tensor = torch.from_numpy(stack).unsqueeze(0).to(self.device)  # shape: (1, 4, 84, 84)
+            self.agent.qnet_local.eval()
+            with torch.no_grad():
+                q_values = self.agent.qnet_local(state_tensor)
+            return q_values.argmax(1).item()
 
 # Preprocessing
 import numpy as np
@@ -96,16 +105,7 @@ class Agent:
 
         preprocessed = self.preprocess(initial_obs)
         self.stack_buffer[:] = np.repeat(preprocessed, 4, axis=0)
-    def get_action(self, stack):
-        eps = 0.01  # inference 固定低 epsilon
-        if random.random() < eps:
-            return random.randint(0, self.agent.action_size - 1)
-        else:
-            state_tensor = torch.from_numpy(stack).unsqueeze(0).to(self.device)  # shape: (1, 4, 84, 84)
-            self.agent.qnet_local.eval()
-            with torch.no_grad():
-                q_values = self.agent.qnet_local(state_tensor)
-            return q_values.argmax(1).item()
+
     def act(self, obs):
         self.frame_count += 1
         preprocessed = self.preprocess(obs)
