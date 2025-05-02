@@ -1,12 +1,9 @@
-import gym
 import torch
 from torch import nn
+import random
 import numpy as np
-import random
-from PIL import Image
-from collections import deque
 import cv2
-import random
+from collections import deque
 # QNet
 class QNet(nn.Module):
     def __init__(self, input_shape, n_actions):
@@ -59,67 +56,105 @@ class DQNAgent:
         self.qnet_local = QNet(state_size, action_size).to(self.device)
         self.qnet_target = QNet(state_size, action_size).to(self.device)
 
-        self.last_action = 0  # 初始化 last_action
-
-    def get_action(self, stack):
-        eps = 0.01  # 推論固定低 epsilon
-        if random.random() < eps:
-            return random.randint(0, self.action_size - 1)
-        else:
-            state_tensor = torch.from_numpy(stack).unsqueeze(0).to(self.device)  # shape: (1, 4, 84, 84)
-            self.qnet_local.eval()
-            with torch.no_grad():
-                q_values = self.qnet_local(state_tensor)
-            return q_values.argmax(1).item()
-
+# Agent
 
 class Agent:
     def __init__(self):
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.action_space = gym.spaces.Discrete(12)
-
+        self.device = torch.device("cpu")
         self.agent = DQNAgent((4, 84, 84), 12, device=self.device)
 
-        checkpoint = torch.load('./model.pth', map_location=self.device)
+        checkpoint = torch.load("./model.pth", map_location=self.device)
         self.agent.qnet_local.load_state_dict(checkpoint['qnet_local'])
 
         self.raw_obs_buffer = deque(maxlen=2)  # 模仿 MaxAndSkipEnv 的兩幀 buffer
-        self.stack_buffer = np.zeros((4, 84, 84), dtype=np.float32)  # 模仿 FrameStack
-        self.frame_count = 0
+        self.stack_buffer = np.zeros((4, 84, 84), dtype=np.float32)  # frame stack
+        self.last_action = 0
+        self.frame_count = 0  # 幀計數
 
     def preprocess(self, obs):
         gray = cv2.cvtColor(obs, cv2.COLOR_RGB2GRAY)
         resized = cv2.resize(gray, (84, 84), interpolation=cv2.INTER_AREA)
-        return np.expand_dims(resized, axis=0).astype(np.float32)  # shape: (1, 84, 84)
-
-    def reset(self, initial_obs):
-        self.raw_obs_buffer.clear()
-        self.frame_count = 0
-        self.agent.last_action = 0
-
-        preprocessed = self.preprocess(initial_obs)  # shape: (1, 84, 84)
-        self.stack_buffer[:] = np.repeat(preprocessed, 4, axis=0)  # 初始化 4 幀一致
-
-    def act(self, obs):
+        resized = resized[:,:,None]
+        state = np.moveaxis(resized, 2, 0)
+        return state # shape: (1, 84, 84)
+    def act(self, observation):
         self.frame_count += 1
 
-        # 若在 skip 中間幀，重複上次行為
-        if self.frame_count % 4 in (2, 3):
-            return self.agent.last_action
+        if self.frame_count == 1:
+            self.raw_obs_buffer.clear()
+            self.stack_buffer[:] = 0
 
-        preprocessed = self.preprocess(obs)
-        self.raw_obs_buffer.append(preprocessed)
+            self.raw_obs_buffer.append(observation)
+            obs = self.preprocess(observation)
+            self.stack_buffer[-1] = obs  # 填最後一格
+            norm_stack = self.stack_buffer.astype(np.float32) / 255.0
+            self.last_action = self.select_action(norm_stack)
+            return self.last_action
 
-        if len(self.raw_obs_buffer) == 2:
-            max_frame = np.maximum(self.raw_obs_buffer[0], self.raw_obs_buffer[1])
+        self.raw_obs_buffer.append(observation)
+
+        if self.frame_count % 4 == 0:
+            max_frame = np.max(np.stack(self.raw_obs_buffer), axis=0)
+            self.raw_obs_buffer.clear()
+
+            obs = self.preprocess(max_frame)
+            self.stack_buffer[:-1] = self.stack_buffer[1:]
+            self.stack_buffer[-1] = obs
+
+            norm_stack = self.stack_buffer.astype(np.float32) / 255.0
+            self.last_action = self.select_action(norm_stack)
+            return self.last_action
+
+        return self.last_action  # 不更新 stack、不選動作
+
+    # def act(self, observation):
+    #     self.frame_count += 1
+
+    #     if self.frame_count == 1:
+    #         self.raw_obs_buffer.clear()
+    #         self.stack_buffer[:] = 0
+
+    #         self.raw_obs_buffer.append(observation)
+
+    #         obs = self.preprocess(self.raw_obs_buffer[-1])
+    #         self.stack_buffer[:-1] = self.stack_buffer[1:]
+    #         self.stack_buffer[-1] = obs
+    #         norm_stack = self.stack_buffer.astype(np.float32) / 255.0
+    #         self.last_action = self.select_action(norm_stack)
+    #         return self.last_action  
+    #     # 儲存最新 obs，模仿 MaxAndSkipEnv (保留兩幀)
+    #     if self.frame_count % 4 == 1:
+    #         self.raw_obs_buffer.append(observation)
+
+    #         # obs = self.preprocess(self.raw_obs_buffer[-1])
+    #         # self.stack_buffer[:-1] = self.stack_buffer[1:]
+    #         # self.stack_buffer[-1] = obs
+            
+    #         self.last_action = self.select_action(self.stack_buffer)
+    #         return self.last_action
+    #     else:
+    #         if self.frame_count % 4 == 2 or self.frame_count % 4 == 3:
+    #             self.raw_obs_buffer.append(observation)
+    #             return self.last_action
+    #         elif self.frame_count % 4 == 0:
+    #             self.raw_obs_buffer.append(observation)
+    #             max_frame = np.max(np.stack(self.raw_obs_buffer), axis=0)
+    #             obs = self.preprocess(max_frame)
+    #             self.stack_buffer[:-1] = self.stack_buffer[1:]
+    #             self.stack_buffer[-1] = obs
+    #             self.stack_buffer = self.stack_buffer.astype(np.float32) / 255.0
+    #             return self.last_action
+
+    def select_action(self, stack):
+        eps = 0.01  # inference 固定低 epsilon
+        if random.random() < eps:
+            return random.randint(0, self.agent.action_size - 1)
         else:
-            max_frame = self.raw_obs_buffer[0]
+            state_tensor = torch.from_numpy(stack).unsqueeze(0).to(self.device)  # shape: (1, 4, 84, 84)
+            self.agent.qnet_local.eval()
+            with torch.no_grad():
+                q_values = self.agent.qnet_local(state_tensor)
+            return q_values.argmax(1).item()
 
-        # 更新 frame stack（右移後 append）
-        self.stack_buffer[:-1] = self.stack_buffer[1:]
-        self.stack_buffer[-1] = max_frame[0]  # shape: (84, 84)
 
-        input_state = self.stack_buffer / 255.0  # normalize to [0, 1]
-        action = self.agent.get_action(input_state)
-        self.agent.last_action = action
-        return action
+
