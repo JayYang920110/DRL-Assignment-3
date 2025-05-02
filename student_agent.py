@@ -74,7 +74,7 @@ class Agent:
 
         self.raw_obs_buffer = []  # 暫存連續4幀原始obs
         self.stack_buffer = np.zeros((4, 84, 84), dtype=np.float32)  # frame stack
-        self.last_action = 0
+        self.last_action = 1
         self.frame_count = 0  # 記錄幾幀進來了
 
     def reset(self):
@@ -114,11 +114,10 @@ class Agent:
             # 更新 frame stack
             self.stack_buffer[:-1] = self.stack_buffer[1:]
             self.stack_buffer[-1] = max_frame
-
+ 
             # 選擇動作
-
-
             self.last_action = self.select_action(self.stack_buffer)
+
 
         return self.last_action
 
