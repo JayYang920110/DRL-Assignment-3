@@ -1,10 +1,9 @@
-import gym
 import torch
 from torch import nn
-import numpy as np
 import random
-from PIL import Image
-
+import numpy as np
+import cv2
+from collections import deque
 # QNet
 class QNet(nn.Module):
     def __init__(self, input_shape, n_actions):
@@ -57,18 +56,8 @@ class DQNAgent:
         self.qnet_local = QNet(state_size, action_size).to(self.device)
         self.qnet_target = QNet(state_size, action_size).to(self.device)
 
-
-# Preprocessing
-import numpy as np
-import cv2
-from collections import deque
-
 # Agent
-import numpy as np
-import torch
-import random
-import cv2
-from collections import deque
+
 class Agent:
     def __init__(self):
         self.device = torch.device("cpu")
@@ -85,18 +74,22 @@ class Agent:
     def preprocess(self, obs):
         gray = cv2.cvtColor(obs, cv2.COLOR_RGB2GRAY)
         resized = cv2.resize(gray, (84, 84), interpolation=cv2.INTER_AREA)
-        return resized.astype(np.float32)[None, :, :] / 255.0  # shape: (1, 84, 84)
+        state = np.moveaxis(resized, 2, 0)
+        return state # shape: (1, 84, 84)
 
     def act(self, observation):
         self.frame_count += 1
 
         if self.frame_count == 1:
+            self.raw_obs_buffer.clear()
+            self.stack_buffer[:] = 0
 
             self.raw_obs_buffer.append(observation)
 
             obs = self.preprocess(self.raw_obs_buffer[-1])
             self.stack_buffer[:-1] = self.stack_buffer[1:]
             self.stack_buffer[-1] = obs
+            self.stack_buffer / 255.0
             self.last_action = self.select_action(self.stack_buffer)
             return self.last_action  
         # 儲存最新 obs，模仿 MaxAndSkipEnv (保留兩幀)
@@ -118,6 +111,7 @@ class Agent:
                 obs = self.preprocess(max_frame)
                 self.stack_buffer[:-1] = self.stack_buffer[1:]
                 self.stack_buffer[-1] = obs
+                self.stack_buffer / 255.0
                 return self.last_action
 
     def select_action(self, stack):
@@ -131,56 +125,5 @@ class Agent:
                 q_values = self.agent.qnet_local(state_tensor)
             return q_values.argmax(1).item()
 
-
-        # # 第4幀來了：模擬 MaxAndSkipEnv (skip=4) 的 max(obs[-2], obs[-1])
-        # obs3 = self.preprocess(self.raw_obs_buffer[-2])
-        # obs4 = self.preprocess(self.raw_obs_buffer[-1])
-        # max_frame = np.maximum(obs3, obs4)
-
-        # # 更新 frame stack
-        # self.stack_buffer[:-1] = self.stack_buffer[1:]
-        # self.stack_buffer[-1] = max_frame
-
-
-        # self.raw_obs_buffer.clear()
-
-        # # Epsilon-greedy 動作選擇
-        # eps = 0.01
-        # if random.random() < eps:
-        #     self.last_action = random.randint(0, self.agent.action_size - 1)
-        # else:
-        #     state_tensor = torch.from_numpy(self.stack_buffer).unsqueeze(0).to(self.device)
-        #     self.agent.qnet_local.eval()
-        #     with torch.no_grad():
-        #         q_values = self.agent.qnet_local(state_tensor)
-        #     self.last_action = q_values.argmax(1).item()
-
-        # return self.last_action
-
-
-        # # 第4幀來了：模擬 MaxAndSkipEnv (skip=4) 的 max(obs[-2], obs[-1])
-        # obs3 = self.preprocess(self.raw_obs_buffer[-2])
-        # obs4 = self.preprocess(self.raw_obs_buffer[-1])
-        # max_frame = np.maximum(obs3, obs4)
-
-        # # 更新 frame stack
-        # self.stack_buffer[:-1] = self.stack_buffer[1:]
-        # self.stack_buffer[-1] = max_frame
-
-        
-        # self.raw_obs_buffer.clear()
-
-        # # Epsilon-greedy 動作選擇
-        # eps = 0.01
-        # if random.random() < eps:
-        #     self.last_action = random.randint(0, self.agent.action_size - 1)
-        # else:
-        #     state_tensor = torch.from_numpy(self.stack_buffer).unsqueeze(0).to(self.device)
-        #     self.agent.qnet_local.eval()
-        #     with torch.no_grad():
-        #         q_values = self.agent.qnet_local(state_tensor)
-        #     self.last_action = q_values.argmax(1).item()
-
-        # return self.last_action
 
 
