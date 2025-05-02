@@ -74,7 +74,7 @@ class Agent:
     def preprocess(self, obs):
         gray = cv2.cvtColor(obs, cv2.COLOR_RGB2GRAY)
         resized = cv2.resize(gray, (84, 84), interpolation=cv2.INTER_AREA)
-        resized = resized[:,:,None]
+        resized = resized
         state = np.moveaxis(resized, 2, 0)
         return state # shape: (1, 84, 84)
 
@@ -90,8 +90,8 @@ class Agent:
             obs = self.preprocess(self.raw_obs_buffer[-1])
             self.stack_buffer[:-1] = self.stack_buffer[1:]
             self.stack_buffer[-1] = obs
-            self.stack_buffer / 255.0
-            self.last_action = self.select_action(self.stack_buffer)
+            norm_stack = self.stack_buffer / 255.0
+            self.last_action = self.select_action(norm_stack)
             return self.last_action  
         # 儲存最新 obs，模仿 MaxAndSkipEnv (保留兩幀)
         if self.frame_count % 4 == 1:
@@ -112,7 +112,6 @@ class Agent:
                 obs = self.preprocess(max_frame)
                 self.stack_buffer[:-1] = self.stack_buffer[1:]
                 self.stack_buffer[-1] = obs
-                self.stack_buffer / 255.0
                 return self.last_action
 
     def select_action(self, stack):
