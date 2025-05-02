@@ -71,7 +71,7 @@ from collections import deque
 import cv2
 
 class Agent:
-    def __init__(self, model_path):
+    def __init__(self):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.action_space = gym.spaces.Discrete(12)
 
