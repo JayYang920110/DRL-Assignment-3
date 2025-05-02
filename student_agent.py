@@ -77,44 +77,72 @@ class Agent:
         resized = resized[:,:,None]
         state = np.moveaxis(resized, 2, 0)
         return state # shape: (1, 84, 84)
-
     def act(self, observation):
         self.frame_count += 1
 
+        # 第 1 幀：reset
         if self.frame_count == 1:
             self.raw_obs_buffer.clear()
             self.stack_buffer[:] = 0
 
-            self.raw_obs_buffer.append(observation)
+        # 每幀都存進 obs buffer（最多兩張）
+        self.raw_obs_buffer.append(observation)
 
-            obs = self.preprocess(self.raw_obs_buffer[-1])
-            self.stack_buffer[:-1] = self.stack_buffer[1:]
-            self.stack_buffer[-1] = obs
+        # 第 4n 幀才執行 max + preprocess + stack update + select_action
+        if self.frame_count % 4 == 0:
+            # Max over last 2 frames
+            max_frame = np.max(np.stack(self.raw_obs_buffer), axis=0).copy()
+            obs = self.preprocess(max_frame)  # shape: (1, 84, 84)
+
+            # Slide window update: 後移，然後最後一格填入新 frame
+            self.stack_buffer[1:] = self.stack_buffer[:-1]
+            self.stack_buffer[0] = obs  # 最新放前面（如果模型習慣這樣）
+
+            # Normalize
             norm_stack = self.stack_buffer.astype(np.float32) / 255.0
-            self.last_action = self.select_action(norm_stack)
-            return self.last_action  
-        # 儲存最新 obs，模仿 MaxAndSkipEnv (保留兩幀)
-        if self.frame_count % 4 == 1:
-            self.raw_obs_buffer.append(observation)
 
-            # obs = self.preprocess(self.raw_obs_buffer[-1])
-            # self.stack_buffer[:-1] = self.stack_buffer[1:]
-            # self.stack_buffer[-1] = obs
+            # Select new action
+            self.last_action = self.select_action(norm_stack)
+
+        # 在 frame 1~3 之間都維持舊動作
+        return self.last_action
+    # def act(self, observation):
+    #     self.frame_count += 1
+
+    #     if self.frame_count == 1:
+    #         self.raw_obs_buffer.clear()
+    #         self.stack_buffer[:] = 0
+
+    #         self.raw_obs_buffer.append(observation)
+
+    #         obs = self.preprocess(self.raw_obs_buffer[-1])
+    #         self.stack_buffer[:-1] = self.stack_buffer[1:]
+    #         self.stack_buffer[-1] = obs
+    #         norm_stack = self.stack_buffer.astype(np.float32) / 255.0
+    #         self.last_action = self.select_action(norm_stack)
+    #         return self.last_action  
+    #     # 儲存最新 obs，模仿 MaxAndSkipEnv (保留兩幀)
+    #     if self.frame_count % 4 == 1:
+    #         self.raw_obs_buffer.append(observation)
+
+    #         # obs = self.preprocess(self.raw_obs_buffer[-1])
+    #         # self.stack_buffer[:-1] = self.stack_buffer[1:]
+    #         # self.stack_buffer[-1] = obs
             
-            self.last_action = self.select_action(self.stack_buffer)
-            return self.last_action
-        else:
-            if self.frame_count % 4 == 2 or self.frame_count % 4 == 3:
-                self.raw_obs_buffer.append(observation)
-                return self.last_action
-            elif self.frame_count % 4 == 0:
-                self.raw_obs_buffer.append(observation)
-                max_frame = np.max(np.stack(self.raw_obs_buffer), axis=0)
-                obs = self.preprocess(max_frame)
-                self.stack_buffer[:-1] = self.stack_buffer[1:]
-                self.stack_buffer[-1] = obs
-                self.stack_buffer = self.stack_buffer.astype(np.float32) / 255.0
-                return self.last_action
+    #         self.last_action = self.select_action(self.stack_buffer)
+    #         return self.last_action
+    #     else:
+    #         if self.frame_count % 4 == 2 or self.frame_count % 4 == 3:
+    #             self.raw_obs_buffer.append(observation)
+    #             return self.last_action
+    #         elif self.frame_count % 4 == 0:
+    #             self.raw_obs_buffer.append(observation)
+    #             max_frame = np.max(np.stack(self.raw_obs_buffer), axis=0)
+    #             obs = self.preprocess(max_frame)
+    #             self.stack_buffer[:-1] = self.stack_buffer[1:]
+    #             self.stack_buffer[-1] = obs
+    #             self.stack_buffer = self.stack_buffer.astype(np.float32) / 255.0
+    #             return self.last_action
 
     def select_action(self, stack):
         eps = 0.01  # inference 固定低 epsilon
